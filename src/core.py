@@ -128,12 +128,9 @@ class CVMEME:
         with open(descriptions_path, "r", encoding="utf-8") as json_file:
             self.descriptions = json.load(json_file)
 
-    def get_other_respond(self, txt: str, log: bool = True, user_id: int = 0) -> str:
+    def get_other_respond(self, txt: str, user_id: int = 0, user_name: str = "") -> str:
 
-        if log:
-            with open(self.log_path, "a") as log_file:
-                interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_file.write(f"User ID: {user_id} => Got question ({interaction_time})\n\n")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got question")
 
         response = self.client.chat.completions.create(
             model=self.model,
