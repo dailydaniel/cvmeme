@@ -29,7 +29,7 @@ def little_random(memes: list[str], meme: str) -> str:
     for i, mem in enumerate(memes):
         count_memes[mem] += len(memes) - i
 
-    for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):
+    for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):  # change weights
         count_memes[mem] += 1
 
     count_memes[meme] += randint(1, 3)
