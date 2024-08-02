@@ -199,7 +199,7 @@ class CVMEME:
                 }
             ],
             max_tokens=128,
-            temperature=0.3,
+            temperature=0.5,
         )
 
         return response.choices[0].message.content
