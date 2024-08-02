@@ -26,7 +26,7 @@ def log_interaction(log_path: str, text: str):
 def little_random(memes: list[str], meme: str) -> str:
     count_memes = Counter()
 
-    for i, mem in range(len(memes)):
+    for i, mem in enumerate(memes):
         count_memes[mem] += len(memes) - i
 
     for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):
