@@ -13,14 +13,16 @@ from prompts import scale, prompt_rerank, cv_scale, base_prompt, format_example
 load_dotenv()
 
 
-def extract_text_from_pdf(file, max_pages=5, bytes=True) -> str:
-    if bytes:
+def extract_text_from_pdf(file, max_pages=5, _bytes=True) -> tuple[bool, str]:
+    if _bytes:
         document = fitz.open(stream=file, filetype="pdf")
     else:
         document = fitz.open(file)
 
     if len(document) > max_pages:
-        raise ValueError(f"Document has {len(document)} pages, but the limit is {max_pages} pages.")
+        # raise ValueError(f"Document has {len(document)} pages, but the limit is {max_pages} pages.")
+        print(f"Document has {len(document)} pages, but the limit is {max_pages} pages.")
+        return False, ""
 
     text = ""
 
@@ -28,49 +30,48 @@ def extract_text_from_pdf(file, max_pages=5, bytes=True) -> str:
         page = document.load_page(page_num)
         text += page.get_text()
 
-    return text
+    return True, text
 
 
-def parse_json_scale(txt: str, return_full=False) -> dict | list[int]:
+def parse_json_scale(txt: str, return_full=False) -> tuple[bool, dict | list[int]]:
     splitted = txt.split('\n')
 
     if splitted[0] == '```json' and splitted[-1] == '```':
         parsed = json.loads('\n'.join(splitted[1:-1]))
 
         if return_full:
-            return {k: int(v) for k, v in parsed.items()}
+            try:
+                return True, {k: int(v) for k, v in parsed.items()}
+            except:
+                # raise ValueError("Invalid json format")
+                print("Invalid json format")
+                return False, {}
         else:
             try:
-                return [int(v) for _, v in parsed.items()]
+                return True, [int(v) for _, v in parsed.items()]
             except:
-                raise ValueError("Invalid json format")
+                print("Invalid json format")
+                return False, []
     elif splitted[0] == '```json' and splitted[-1] == '' and splitted[-2].strip() == '```':
-        # finish_index = len(splitted) - 1
-        # max_steps = 5
-        # step = 0
-        #
-        # while step <= max_steps and splitted[finish_index - step].strip() != '```':
-        #     print(step, splitted[finish_index - step])
-        #     step += 1
-        #
-        # new_finish_index = finish_index - step - 1
-        #
-        # if splitted[new_finish_index] != '```':
-        #     raise ValueError(f"Invalid json format, step={step} {txt}")
-
-        # parsed = json.loads('\n'.join(splitted[1:new_finish_index]))
-
         parsed = json.loads('\n'.join(splitted[1:-2]))
 
         if return_full:
-            return {k: int(v) for k, v in parsed.items()}
+            try:
+                return True, {k: int(v) for k, v in parsed.items()}
+            except:
+                print("Invalid json format")
+                return False, {}
         else:
             try:
                 return [int(v) if isinstance(v, int) else 3 for _, v in parsed.items()]
             except:
-                raise ValueError(f"Invalid json format {parsed}")
+                # raise ValueError(f"Invalid json format {parsed}")
+                print(f"Invalid json format {parsed}")
+                return False, []
     else:
-        raise ValueError(f"Invalid json format {txt}")
+        # raise ValueError(f"Invalid json format {txt}")
+        print(f"Invalid json format {txt}")
+        return False, {}
 
 
 def match_score(meme, resume) -> float:
@@ -198,27 +199,42 @@ class CVMEME:
 
         return response.choices[0].message.content
 
-    def process_cv(self, file: str | BytesIO, bytes=True) -> tuple[str, str]:
-        text = extract_text_from_pdf(file, bytes=bytes)
-        return text, self.get_cv_scale(text)
+    def process_cv(self, file: str | BytesIO, _bytes=True) -> tuple[bool, tuple[str, str]]:
+        success, text = extract_text_from_pdf(file, _bytes=_bytes)
 
-    def get_scores(self, cv_scale: str, return_scores: bool = False):
-        cv_scale_parsed = parse_json_scale(cv_scale)
+        if success:
+            response = self.get_cv_scale(text)
+            if response:
+                return True, (text, response)
+            else:
+                return False, (text, "")
+        else:
+            return False, ("", "")
+
+    def get_scores(self, cv_scaled: str, return_scores: bool = False) -> list[str | tuple[str, float]]:
+        success, cv_scale_parsed = parse_json_scale(cv_scaled)
+
+        if not success:
+            return []
+
         scores_by_meme = {
             meme_name: [int(v) for _, v in scores.items()]
             for meme_name, scores in self.scores.items()
         }
 
-        scored_memes = [
-            (meme, match_score(scores, cv_scale_parsed))
-            for meme, scores in scores_by_meme.items()]
+        try:
+            scored_memes = [
+                (meme, match_score(scores, cv_scale_parsed))
+                for meme, scores in scores_by_meme.items()]
+        except:
+            return []
 
         if return_scores:
             return sorted(scored_memes, key=lambda x: x[1])[:3]
         else:
             return [n for n, s in sorted(scored_memes, key=lambda x: x[1])[:3]]
 
-    def rerank_memes(self, cv: str, memes: list[str]) -> str:
+    def rerank_memes(self, cv: str, memes: list[str]) -> tuple[bool, str]:
         memes_descriptions = [self.descriptions[meme] for meme in memes]
         memes_short = []
 
@@ -227,11 +243,17 @@ class CVMEME:
             with open(path, "r", encoding="utf-8") as file:
                 memes_short.append(file.read())
 
-        return self.get_meme_rerank(
+        response = self.get_meme_rerank(
             cv,
             [(memes[i], memes_short[i], memes_descriptions[i])
              for i in range(len(memes))]
         )
+        response = response.split('\n')[0].strip()
+
+        if response in memes:
+            return True, response
+        else:
+            return False, response
 
     def get_meme_img_path(self, meme: str) -> str:
         return f"{self.memes_base_dir}/img/{meme}.jpg"
@@ -241,13 +263,16 @@ class CVMEME:
             file: str | BytesIO,
             log: bool = True,
             user_id: int = 0
-    ) -> str:
+    ) -> tuple[bool, str]:
         if log:
             with open(self.log_path, "a") as log_file:
                 interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_file.write(f"User ID: {user_id} => Start ({interaction_time})\n\n")
 
-        cv, cv_processed = self.process_cv(file)
+        success, (cv, cv_processed) = self.process_cv(file)
+
+        if not success:
+            return False, "Error in processing cv"
 
         if log:
             with open(self.log_path, "a") as log_file:
@@ -256,16 +281,22 @@ class CVMEME:
 
         cv_scores = self.get_scores(cv_processed)
 
+        if not cv_scores:
+            return False, "Error in getting scores"
+
         if log:
             with open(self.log_path, "a") as log_file:
                 interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_file.write(f"User ID: {user_id} => Got Scores ({cv_scores}) ({interaction_time})\n\n")
 
-        meme = self.rerank_memes(cv, cv_scores).split('\n')[0].strip()
+        success, meme = self.rerank_memes(cv, cv_scores)
+
+        if not success:
+            return False, f"Error in reranking memes ({meme})"
 
         if log:
             with open(self.log_path, "a") as log_file:
                 interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_file.write(f"User ID: {user_id} => Got Meme ({meme}) ({interaction_time})\n\n")
 
-        return self.get_meme_img_path(meme)
+        return True, self.get_meme_img_path(meme)

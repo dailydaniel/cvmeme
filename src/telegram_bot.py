@@ -43,14 +43,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         file = await update.message.document.get_file()
         file_bytes = BytesIO(await file.download_as_bytearray())
 
-        img_path = cv_meme(file_bytes, user_id=update.effective_user.id)
-        img_path = resize_image_if_needed(img_path)
+        success, img_path = cv_meme(file_bytes, user_id=update.effective_user.id)
 
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img_path, 'rb'))
+        if success:
+            img_path = resize_image_if_needed(img_path)
 
-        if random() <= 0.3:
-            txt = choices([')))', ')', ':)'])[0]
-            await update.message.reply_text(txt)
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img_path, 'rb'))
+
+            if random() <= 0.3:
+                txt = choices([')))', ')', ':)'])[0]
+                await update.message.reply_text(txt)
+        else:
+            await update.message.reply_text(f'Произошла ошибка: {img_path}')
     else:
         await update.message.reply_text('Пока я умею читать только PDF-файлы.')
 
