@@ -2,3 +2,4 @@ notebooks/.env
 src/.env
 data/log.txt
 data/cv/*
+tbot/*
