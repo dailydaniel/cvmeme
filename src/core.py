@@ -63,7 +63,7 @@ def parse_json_scale(txt: str, return_full=False) -> tuple[bool, dict | list[int
                 return False, {}
         else:
             try:
-                return [int(v) if isinstance(v, int) else 3 for _, v in parsed.items()]
+                return True, [int(v) if isinstance(v, int) else 3 for _, v in parsed.items()]
             except:
                 # raise ValueError(f"Invalid json format {parsed}")
                 print(f"Invalid json format {parsed}")
