@@ -5,6 +5,7 @@ from random import random, choices
 from PIL import Image
 
 from telegram import Update, Document
+from telegram.error import BadRequest
 from telegram.constants import ChatAction
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -44,25 +45,35 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if document.mime_type == 'application/pdf':
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO)
 
-        file = await update.message.document.get_file()
-        file_bytes = BytesIO(await file.download_as_bytearray())
+        try:
+            file = await update.message.document.get_file()
 
-        success, img_path = cv_meme(
-            file_bytes,
-            user_id=update.effective_user.id,
-            user_name=update.effective_user.username
-        )
+            file_bytes = BytesIO(await file.download_as_bytearray())
 
-        if success:
-            img_path = resize_image_if_needed(img_path)
+            success, img_path = cv_meme(
+                file_bytes,
+                user_id=update.effective_user.id,
+                user_name=update.effective_user.username
+            )
 
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img_path, 'rb'))
+            if success:
+                img_path = resize_image_if_needed(img_path)
 
-            if random() <= 0.3:
-                txt = choices([')))', ')', ':)'])[0]
-                await update.message.reply_text(txt)
-        else:
-            await update.message.reply_text(f'Произошла ошибка: {img_path}')
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img_path, 'rb'))
+
+                if random() <= 0.3:
+                    txt = choices([')))', ')', ':)'])[0]
+                    await update.message.reply_text(txt)
+            else:
+                await update.message.reply_text(f'Произошла ошибка: {img_path}')
+
+
+        except BadRequest as e:
+            if str(e) == "File is too big":
+                await update.message.reply_text("Загруженный файл слишком большой\nЧе там за резюме у тебя")
+            else:
+                await update.message.reply_text("Произошла ошибка при обработке файла.")
+
     else:
         await update.message.reply_text('Пока я умею читать только PDF-файлы.')
 
