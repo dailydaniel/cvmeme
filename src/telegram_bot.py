@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 from io import BytesIO
 from random import random, choices
+from PIL import Image
 
 from telegram import Update, Document
 from telegram.constants import ChatAction
@@ -11,6 +12,17 @@ from core import CVMEME
 
 
 cv_meme = CVMEME()
+
+
+def resize_image_if_needed(image_path: str) -> str:
+    max_size = (4096, 4096)
+    with Image.open(image_path) as img:
+        if img.width > max_size[0] or img.height > max_size[1]:
+            img.thumbnail(max_size, Image.ANTIALIAS)
+            # resized_img_path = image_path.replace(".jpg", "_resized.jpg")
+            img.save(image_path, "JPEG")
+            return image_path
+    return image_path
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -32,6 +44,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         file_bytes = BytesIO(await file.download_as_bytearray())
 
         img_path = cv_meme(file_bytes, user_id=update.effective_user.id)
+        img_path = resize_image_if_needed(img_path)
 
         await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img_path, 'rb'))
 
