@@ -6,6 +6,8 @@ import fitz
 import math
 from io import BytesIO
 from datetime import datetime, timedelta
+from random import choices, randint
+from collections import Counter
 
 from prompts import scale, prompt_rerank, cv_scale, base_prompt, format_example
 
@@ -19,6 +21,20 @@ def log_interaction(log_path: str, text: str):
         moscow_time = current_time_utc + timedelta(hours=3)
         interaction_time = moscow_time.strftime("%Y-%m-%d %H:%M:%S")
         log_file.write(f"{text} ({interaction_time})\n\n")
+
+
+def little_random(memes: list[str], meme: str) -> str:
+    count_memes = Counter()
+
+    for i, mem in range(len(memes)):
+        count_memes[mem] += len(memes) - i
+
+    for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):
+        count_memes[mem] += 1
+
+    count_memes[meme] += randint(1, 3)
+
+    return count_memes.most_common(1)[0][0]
 
 
 def extract_text_from_pdf(file, max_pages=5, _bytes=True) -> tuple[bool, str]:
@@ -199,7 +215,7 @@ class CVMEME:
                 }
             ],
             max_tokens=128,
-            temperature=0.5,
+            temperature=0.3,
         )
 
         return response.choices[0].message.content
@@ -295,4 +311,8 @@ class CVMEME:
 
         log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Meme ({meme})")
 
-        return True, self.get_meme_img_path(meme)
+        final_meme = little_random(cv_scores, meme)
+
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Final Meme ({meme})")
+
+        return True, self.get_meme_img_path(final_meme)
