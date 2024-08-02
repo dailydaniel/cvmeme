@@ -43,7 +43,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         file = await update.message.document.get_file()
         file_bytes = BytesIO(await file.download_as_bytearray())
 
-        success, img_path = cv_meme(file_bytes, user_id=update.effective_user.id)
+        success, img_path = cv_meme(
+            file_bytes,
+            user_id=update.effective_user.id,
+            user_name=update.effective_user.username
+        )
 
         if success:
             img_path = resize_image_if_needed(img_path)

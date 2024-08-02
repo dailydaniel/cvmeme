@@ -5,12 +5,20 @@ import json
 import fitz
 import math
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from prompts import scale, prompt_rerank, cv_scale, base_prompt, format_example
 
 
 load_dotenv()
+
+
+def log_interaction(log_path: str, text: str):
+    with open(log_path, "a") as log_file:
+        current_time_utc = datetime.utcnow()
+        moscow_time = current_time_utc + timedelta(hours=3)
+        interaction_time = moscow_time.strftime("%Y-%m-%d %H:%M:%S")
+        log_file.write(f"{text} ({interaction_time})\n\n")
 
 
 def extract_text_from_pdf(file, max_pages=5, _bytes=True) -> tuple[bool, str]:
@@ -261,42 +269,33 @@ class CVMEME:
     def __call__(
             self,
             file: str | BytesIO,
-            log: bool = True,
-            user_id: int = 0
+            user_id: int = 0,
+            user_name: str = ""
     ) -> tuple[bool, str]:
-        if log:
-            with open(self.log_path, "a") as log_file:
-                interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_file.write(f"User ID: {user_id} => Start ({interaction_time})\n\n")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Start")
 
         success, (cv, cv_processed) = self.process_cv(file)
 
         if not success:
+            log_interaction(self.log_path, f"User {user_name} ({user_id}) => Error in processing cv")
             return False, "Error in processing cv"
 
-        if log:
-            with open(self.log_path, "a") as log_file:
-                interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_file.write(f"User ID: {user_id} => Process CV ({interaction_time})\n\n")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Process CV")
 
         cv_scores = self.get_scores(cv_processed)
 
         if not cv_scores:
+            log_interaction(self.log_path, f"User {user_name} ({user_id}) => Error in getting scores")
             return False, "Error in getting scores"
 
-        if log:
-            with open(self.log_path, "a") as log_file:
-                interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_file.write(f"User ID: {user_id} => Got Scores ({cv_scores}) ({interaction_time})\n\n")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Scores ({cv_scores})")
 
         success, meme = self.rerank_memes(cv, cv_scores)
 
         if not success:
+            log_interaction(self.log_path, f"User {user_name} ({user_id}) => Error in reranking memes ({meme})")
             return False, f"Error in reranking memes ({meme})"
 
-        if log:
-            with open(self.log_path, "a") as log_file:
-                interaction_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_file.write(f"User ID: {user_id} => Got Meme ({meme}) ({interaction_time})\n\n")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Meme ({meme})")
 
         return True, self.get_meme_img_path(meme)
