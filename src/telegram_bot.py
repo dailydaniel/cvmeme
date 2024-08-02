@@ -31,7 +31,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-    response = cv_meme.get_other_respond(update.message.text, user_id=update.effective_user.id)
+    response = cv_meme.get_other_respond(
+        update.message.text,
+        user_id=update.effective_user.id,
+        user_name=update.effective_user.username
+    )
     await update.message.reply_text(response)
 
 
