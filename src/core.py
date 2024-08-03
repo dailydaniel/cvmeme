@@ -232,7 +232,11 @@ class CVMEME:
         else:
             return False, ("", "")
 
-    def get_scores(self, cv_scaled: str, return_scores: bool = False) -> list[str | tuple[str, float]]:
+    def get_scores(
+            self,
+            cv_scaled: str,
+            # return_scores: bool = False
+    ) -> list[str | tuple[str, float]]:
         success, cv_scale_parsed = parse_json_scale(cv_scaled)
 
         if not success:
@@ -250,10 +254,11 @@ class CVMEME:
         except:
             return []
 
-        if return_scores:
-            return sorted(scored_memes, key=lambda x: x[1])[:3]
-        else:
-            return [n for n, s in sorted(scored_memes, key=lambda x: x[1])[:3]]
+        return sorted(scored_memes, key=lambda x: x[1])
+        # if return_scores:
+        #     return sorted(scored_memes, key=lambda x: x[1])[:3]
+        # else:
+        #     return [n for n, s in sorted(scored_memes, key=lambda x: x[1])[:3]]
 
     def rerank_memes(self, cv: str, memes: list[str]) -> tuple[bool, str]:
         memes_descriptions = [self.descriptions[meme] for meme in memes]
@@ -293,7 +298,7 @@ class CVMEME:
             log_interaction(self.log_path, f"User {user_name} ({user_id}) => Error in processing cv")
             return False, "Error in processing cv"
 
-        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Process CV")
+        log_interaction(self.log_path, f"User {user_name} ({user_id}) => Process CV ({cv_processed})")
 
         cv_scores = self.get_scores(cv_processed)
 
@@ -302,6 +307,8 @@ class CVMEME:
             return False, "Error in getting scores"
 
         log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Scores ({cv_scores})")
+
+        cv_scores = [meme for meme, _ in cv_scores][:3]
 
         success, meme = self.rerank_memes(cv, cv_scores)
 
