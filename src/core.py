@@ -8,8 +8,11 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from random import choices, randint
 from collections import Counter
+import sglang as sgl
 
 from prompts import scale, prompt_rerank, cv_scale, base_prompt, format_example
+from cv_score_model import CV
+from structed_gen import driver_cv_parsing_gen
 
 
 load_dotenv()
@@ -27,9 +30,11 @@ def little_random(memes: list[str], meme: str) -> str:
     count_memes = Counter()
 
     for i, mem in enumerate(memes):
-        count_memes[mem] += len(memes) - i
+        count_memes[mem] += max(len(memes) - 2 - i, 1)
 
-    for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):  # change weights
+    # for mem in choices(memes, k=3, weights=[0.45, 0.35, 0.2]):  # change weights
+    #     count_memes[mem] += 1
+    for mem in choices(memes, k=5, weights=[0.3, 0.275, 0.25, 0.125, 0.05]):  # change weights
         count_memes[mem] += 1
 
     count_memes[meme] += randint(1, 3)
@@ -98,6 +103,17 @@ def parse_json_scale(txt: str, return_full=False) -> tuple[bool, dict | list[int
         return False, {}
 
 
+def parse_formatted_json_scale(txt: str, return_full=False) -> tuple[bool, dict | list[int]]:
+    if txt:
+        resp = json.loads(txt)
+        if return_full:
+            return True, resp
+        else:
+            return True, [v for _, v in resp.items()]
+    else:
+        return False, {}
+
+
 def match_score(meme, resume) -> float:
     return math.sqrt(sum((m - r) ** 2 for m, r in zip(meme, resume)))
 
@@ -115,7 +131,8 @@ class CVMEME:
             memes_base_dir: str = '../data/meme',
             log_path: str = '../data/log.txt',
             # model_name: str = "gpt-4o-mini"
-            model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+            # model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+            model_name: str = "google/gemma-2-2b-it"
     ):
         self.scale_prompt = scale_prompt
         self.rerank_prompt = rerank_prompt
@@ -143,6 +160,8 @@ class CVMEME:
 
         with open(descriptions_path, "r", encoding="utf-8") as json_file:
             self.descriptions = json.load(json_file)
+
+        sgl.set_default_backend(sgl.RuntimeEndpoint(os.environ['LLM_HOST'][:-3]))
 
     def get_other_respond(self, txt: str, user_id: int = 0, user_name: str = "") -> str:
 
@@ -190,8 +209,17 @@ class CVMEME:
 
         return response.choices[0].message.content
 
+    def get_formatted_cv_scale(self, txt: str) -> str:
+        input_txt = self.cv_scale_prompt.format(
+            cv=txt,
+            scale=self.scale_prompt
+        )
+        response = driver_cv_parsing_gen(input_txt, CV)
+
+        return response.split('\n')[-1]
+
     def get_meme_rerank(self, cv: str, memes: list[tuple]) -> str:
-        meme1, meme2, meme3 = memes
+        meme1, meme2, meme3, meme4, meme5 = memes
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -210,6 +238,12 @@ class CVMEME:
                             meme3_name=meme3[0],
                             meme3_desc=meme3[1],
                             meme3_worker=meme3[2],
+                            meme4_name=meme4[0],
+                            meme4_desc=meme4[1],
+                            meme4_worker=meme4[2],
+                            meme5_name=meme5[0],
+                            meme5_desc=meme5[1],
+                            meme5_worker=meme5[2],
                         )},
                     ],
                 }
@@ -224,7 +258,8 @@ class CVMEME:
         success, text = extract_text_from_pdf(file, _bytes=_bytes)
 
         if success:
-            response = self.get_cv_scale(text)
+            # response = self.get_cv_scale(text)
+            response = self.get_formatted_cv_scale(text)
             if response:
                 return True, (text, response)
             else:
@@ -237,7 +272,8 @@ class CVMEME:
             cv_scaled: str,
             # return_scores: bool = False
     ) -> list[str | tuple[str, float]]:
-        success, cv_scale_parsed = parse_json_scale(cv_scaled)
+        # success, cv_scale_parsed = parse_json_scale(cv_scaled)
+        success, cv_scale_parsed = parse_formatted_json_scale(cv_scaled)
 
         if not success:
             return []
@@ -308,7 +344,7 @@ class CVMEME:
 
         log_interaction(self.log_path, f"User {user_name} ({user_id}) => Got Scores ({cv_scores})")
 
-        cv_scores = [meme for meme, _ in cv_scores][:3]
+        cv_scores = [meme for meme, _ in cv_scores][:5]
 
         success, meme = self.rerank_memes(cv, cv_scores)
 
